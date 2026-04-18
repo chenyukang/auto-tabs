@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Auto Tabs",
+  "description": "Keep the number of open tabs under a configured limit by closing the oldest tabs.",
+  "version": "0.1.0",
+  "permissions": ["storage", "tabs"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Auto Tabs",
+    "default_popup": "popup.html"
+  },
+  "options_page": "popup.html"
+}

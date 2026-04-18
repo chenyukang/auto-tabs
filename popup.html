@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Auto Tabs</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main class="panel">
+      <header class="header">
+        <div>
+          <h1>Auto Tabs</h1>
+          <p>Automatically closes the oldest tab when the limit is exceeded.</p>
+        </div>
+        <label class="switch" title="Enable or pause automatic tab closing">
+          <input id="enabled" type="checkbox">
+          <span></span>
+        </label>
+      </header>
+
+      <label class="field" for="maxTabs">
+        <span>Maximum tabs</span>
+        <input id="maxTabs" type="number" min="1" max="1000" step="1" inputmode="numeric">
+      </label>
+
+      <label class="check">
+        <input id="protectPinned" type="checkbox">
+        <span>Protect pinned tabs</span>
+      </label>
+
+      <div class="status" id="status">Loading settings...</div>
+
+      <button id="save" type="button" title="Save settings">
+        <span aria-hidden="true">&#10003;</span>
+        Save
+      </button>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
