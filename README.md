@@ -1,6 +1,8 @@
 # Auto Tabs
 
-Auto Tabs is a Chrome Manifest V3 extension that keeps your open tabs under a configurable limit. When a new tab pushes the count over the limit, the extension closes the oldest eligible tab.
+All the current auto tab extension DOES NOT work for me!!!
+
+`Auto Tabs` is a Chrome Manifest V3 extension that keeps your open tabs under a configurable limit. When a new tab pushes the count over the limit, the extension closes the oldest eligible tab.
 
 ## Features
 
