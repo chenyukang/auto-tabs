@@ -29,6 +29,17 @@
         <span>Protect pinned tabs</span>
       </label>
 
+      <label class="field" for="excludeDomains">
+        <span>Exclude domains</span>
+        <textarea
+          id="excludeDomains"
+          rows="4"
+          spellcheck="false"
+          placeholder="*.google.com&#10;mail.example.com"
+        ></textarea>
+        <small class="hint">One pattern per line, or separate them with commas.</small>
+      </label>
+
       <div class="status" id="status">Loading settings...</div>
 
       <button id="save" type="button" title="Save settings">

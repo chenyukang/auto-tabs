@@ -103,7 +103,28 @@ p {
   font: inherit;
 }
 
+.field textarea {
+  width: 100%;
+  min-height: 92px;
+  resize: vertical;
+  border: 1px solid #cad3d8;
+  border-radius: 8px;
+  padding: 10px;
+  color: #11181c;
+  background: #ffffff;
+  font: inherit;
+  line-height: 1.45;
+}
+
+.hint {
+  color: #5b6870;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
 .field input:focus-visible,
+.field textarea:focus-visible,
 .check input:focus-visible,
 button:focus-visible,
 .switch input:focus-visible + span {
@@ -162,6 +183,7 @@ button:disabled {
   }
 
   p,
+  .hint,
   .status,
   .field,
   .check {
@@ -169,6 +191,7 @@ button:disabled {
   }
 
   .field input,
+  .field textarea,
   .status {
     border-color: #314149;
     color: #eff6f7;

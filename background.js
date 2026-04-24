@@ -4,7 +4,8 @@ const TAB_RECORDS_KEY = "tabRecords";
 const DEFAULT_SETTINGS = {
   enabled: false,
   maxTabs: 12,
-  protectPinned: true
+  protectPinned: true,
+  excludeDomains: []
 };
 
 let queue = Promise.resolve();
@@ -23,15 +24,114 @@ function getErrorMessage(error) {
   return error instanceof Error ? error.message : String(error);
 }
 
+function normalizeDomainPattern(value) {
+  if (value == null) {
+    return "";
+  }
+
+  let normalized = String(value).trim().toLowerCase();
+
+  if (!normalized) {
+    return "";
+  }
+
+  if (normalized.includes("://")) {
+    try {
+      normalized = new URL(normalized).hostname.toLowerCase();
+    } catch {
+      return "";
+    }
+  } else {
+    normalized = normalized.split(/[/?#:]/, 1)[0];
+  }
+
+  if (normalized.startsWith("*.")) {
+    const suffix = normalized.slice(2).replace(/^\.+|\.+$/g, "");
+
+    if (!suffix || suffix.includes("*")) {
+      return "";
+    }
+
+    return `*.${suffix}`;
+  }
+
+  normalized = normalized.replace(/^\.+|\.+$/g, "");
+
+  if (!normalized || normalized.includes("*")) {
+    return "";
+  }
+
+  return normalized;
+}
+
+function sanitizeExcludeDomains(value) {
+  const rawItems = Array.isArray(value)
+    ? value
+    : String(value || "").split(/[\s,;]+/);
+  const uniquePatterns = new Set();
+
+  rawItems.forEach((item) => {
+    const pattern = normalizeDomainPattern(item);
+
+    if (pattern) {
+      uniquePatterns.add(pattern);
+    }
+  });
+
+  return [...uniquePatterns];
+}
+
+function getHostnameFromTab(tab) {
+  const tabUrl = tab?.pendingUrl || tab?.url;
+
+  if (!tabUrl) {
+    return "";
+  }
+
+  try {
+    return new URL(tabUrl).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function matchesDomainPattern(hostname, pattern) {
+  if (!hostname || !pattern) {
+    return false;
+  }
+
+  if (pattern.startsWith("*.")) {
+    const suffix = pattern.slice(2);
+    return hostname.endsWith(`.${suffix}`);
+  }
+
+  return hostname === pattern;
+}
+
+function isExcludedTab(tab, settings) {
+  const hostname = getHostnameFromTab(tab);
+
+  return settings.excludeDomains.some((pattern) =>
+    matchesDomainPattern(hostname, pattern)
+  );
+}
+
 function sanitizeSettings(settings = {}) {
   const maxTabs = Number.parseInt(settings.maxTabs, 10);
 
   return {
-    enabled: settings.enabled !== false,
+    enabled:
+      typeof settings.enabled === "boolean"
+        ? settings.enabled
+        : DEFAULT_SETTINGS.enabled,
     maxTabs: Number.isFinite(maxTabs)
       ? Math.min(Math.max(maxTabs, 1), 1000)
       : DEFAULT_SETTINGS.maxTabs,
-    protectPinned: settings.protectPinned !== false
+    protectPinned:
+      typeof settings.protectPinned === "boolean"
+        ? settings.protectPinned
+        : DEFAULT_SETTINGS.protectPinned,
+    excludeDomains: sanitizeExcludeDomains(settings.excludeDomains)
   };
 }
 
@@ -74,7 +174,15 @@ function isManagedTab(tab, settings) {
     return false;
   }
 
-  return !(settings.protectPinned && tab.pinned);
+  if (settings.protectPinned && tab.pinned) {
+    return false;
+  }
+
+  if (isExcludedTab(tab, settings)) {
+    return false;
+  }
+
+  return true;
 }
 
 async function syncKnownTabs() {
@@ -199,12 +307,33 @@ async function getState() {
   const settings = await getSettings();
   const { tabs } = await syncKnownTabs();
   const managedCount = tabs.filter((tab) => isManagedTab(tab, settings)).length;
+  const excludedCount = tabs.filter((tab) => isExcludedTab(tab, settings)).length;
 
   return {
     settings,
     managedCount,
+    excludedCount,
     totalCount: tabs.length
   };
+}
+
+async function handleCreatedTab(tab) {
+  await recordCreatedTab(tab);
+
+  const settings = await getSettings();
+
+  if (!settings.enabled) {
+    return;
+  }
+
+  if (settings.excludeDomains.length === 0) {
+    await enforceLimit({ keepTabId: tab.id });
+    return;
+  }
+
+  if (getHostnameFromTab(tab)) {
+    await enforceLimit({ keepTabId: tab.id });
+  }
 }
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -224,9 +353,26 @@ chrome.runtime.onStartup.addListener(() => {
 });
 
 chrome.tabs.onCreated.addListener((tab) => {
+  enqueue(() => handleCreatedTab(tab));
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (!changeInfo.url && changeInfo.status !== "loading") {
+    return;
+  }
+
   enqueue(async () => {
-    await recordCreatedTab(tab);
-    await enforceLimit({ keepTabId: tab.id });
+    const settings = await getSettings();
+
+    if (!settings.enabled) {
+      return;
+    }
+
+    if (!getHostnameFromTab(tab)) {
+      return;
+    }
+
+    await enforceLimit({ keepTabId: tabId });
   });
 });
 

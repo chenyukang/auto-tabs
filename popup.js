@@ -1,6 +1,7 @@
 const enabledInput = document.querySelector("#enabled");
 const maxTabsInput = document.querySelector("#maxTabs");
 const protectPinnedInput = document.querySelector("#protectPinned");
+const excludeDomainsInput = document.querySelector("#excludeDomains");
 const saveButton = document.querySelector("#save");
 const statusElement = document.querySelector("#status");
 
@@ -12,6 +13,7 @@ function applyState(state) {
   enabledInput.checked = state.settings.enabled;
   maxTabsInput.value = state.settings.maxTabs;
   protectPinnedInput.checked = state.settings.protectPinned;
+  excludeDomainsInput.value = state.settings.excludeDomains.join("\n");
   updateStatus(state);
 }
 
@@ -20,15 +22,19 @@ function updateStatus(state) {
     ? "Managed tabs"
     : "Tabs";
   const prefix = state.settings.enabled ? "" : "Paused. ";
+  const excludeText = state.settings.excludeDomains.length
+    ? ` Excluded tabs: ${state.excludedCount}.`
+    : "";
 
-  statusElement.textContent = `${prefix}${managedText}: ${state.managedCount} / ${state.settings.maxTabs}. Total tabs: ${state.totalCount}`;
+  statusElement.textContent = `${prefix}${managedText}: ${state.managedCount} / ${state.settings.maxTabs}. Total tabs: ${state.totalCount}.${excludeText}`;
 }
 
 function readSettings() {
   return {
     enabled: enabledInput.checked,
     maxTabs: maxTabsInput.value,
-    protectPinned: protectPinnedInput.checked
+    protectPinned: protectPinnedInput.checked,
+    excludeDomains: excludeDomainsInput.value
   };
 }
 
