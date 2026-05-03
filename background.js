@@ -135,6 +135,27 @@ function sanitizeSettings(settings = {}) {
   };
 }
 
+function getValidTimestamp(value) {
+  const timestamp = Number(value);
+  return Number.isFinite(timestamp) && timestamp > 0 ? timestamp : null;
+}
+
+function getLastActiveAt(tab, record) {
+  const apiLastAccessed = getValidTimestamp(tab?.lastAccessed);
+  const recordedLastActiveAt = getValidTimestamp(record?.lastActiveAt);
+
+  if (apiLastAccessed && recordedLastActiveAt) {
+    return Math.max(apiLastAccessed, recordedLastActiveAt);
+  }
+
+  return (
+    apiLastAccessed ||
+    recordedLastActiveAt ||
+    getValidTimestamp(record?.createdAt) ||
+    0
+  );
+}
+
 async function getSettings() {
   const stored = await chrome.storage.local.get(SETTINGS_KEY);
   return sanitizeSettings(stored[SETTINGS_KEY]);
@@ -203,11 +224,21 @@ async function syncKnownTabs() {
 
   tabsByLikelyAge.forEach((tab, index) => {
     const tabId = String(tab.id);
+    const record = records[tabId] || {};
+    const apiLastAccessed = getValidTimestamp(tab.lastAccessed);
+    const recordedLastActiveAt = getValidTimestamp(record.lastActiveAt);
+    const createdAt =
+      getValidTimestamp(record.createdAt) ||
+      now - (tabsByLikelyAge.length - index) * 1000;
+    const lastActiveAt = tab.active
+      ? now
+      : apiLastAccessed || recordedLastActiveAt || createdAt;
 
-    if (!records[tabId]) {
-      records[tabId] = {
-        createdAt: now - (tabsByLikelyAge.length - index) * 1000
-      };
+    if (
+      record.createdAt !== createdAt ||
+      record.lastActiveAt !== lastActiveAt
+    ) {
+      records[tabId] = { createdAt, lastActiveAt };
       changed = true;
     }
   });
@@ -225,9 +256,25 @@ async function recordCreatedTab(tab) {
   }
 
   const records = await getTabRecords();
+  const now = Date.now();
 
   records[String(tab.id)] = {
-    createdAt: Date.now()
+    createdAt: now,
+    lastActiveAt: getValidTimestamp(tab.lastAccessed) || now
+  };
+
+  await saveTabRecords(records);
+}
+
+async function recordActiveTab(tabId) {
+  const records = await getTabRecords();
+  const key = String(tabId);
+  const now = Date.now();
+  const record = records[key] || {};
+
+  records[key] = {
+    createdAt: getValidTimestamp(record.createdAt) || now,
+    lastActiveAt: now
   };
 
   await saveTabRecords(records);
@@ -247,8 +294,12 @@ async function replaceTabRecord(addedTabId, removedTabId) {
   const records = await getTabRecords();
   const removedKey = String(removedTabId);
   const addedKey = String(addedTabId);
+  const now = Date.now();
 
-  records[addedKey] = records[removedKey] || { createdAt: Date.now() };
+  records[addedKey] = records[removedKey] || {
+    createdAt: now,
+    lastActiveAt: now
+  };
   delete records[removedKey];
 
   await saveTabRecords(records);
@@ -274,9 +325,17 @@ async function enforceLimit(options = {}) {
     .filter((tab) => String(tab.id) !== keepTabId)
     .map((tab) => ({
       tab,
-      createdAt: records[String(tab.id)]?.createdAt || 0
+      record: records[String(tab.id)] || {}
     }))
-    .sort((a, b) => a.createdAt - b.createdAt || a.tab.id - b.tab.id);
+    .sort((a, b) => {
+      const lastActiveDiff =
+        getLastActiveAt(a.tab, a.record) - getLastActiveAt(b.tab, b.record);
+      const createdDiff =
+        (getValidTimestamp(a.record.createdAt) || 0) -
+        (getValidTimestamp(b.record.createdAt) || 0);
+
+      return lastActiveDiff || createdDiff || a.tab.id - b.tab.id;
+    });
 
   const tabsToClose = candidates.slice(0, overflow).map(({ tab }) => tab.id);
   const closedTabIds = [];
@@ -354,6 +413,10 @@ chrome.runtime.onStartup.addListener(() => {
 
 chrome.tabs.onCreated.addListener((tab) => {
   enqueue(() => handleCreatedTab(tab));
+});
+
+chrome.tabs.onActivated.addListener(({ tabId }) => {
+  enqueue(() => recordActiveTab(tabId));
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
